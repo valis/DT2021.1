@@ -1,5 +1,6 @@
 \import Utils
 \import lect03 \hiding (Vec,vnil,vcons)
+\open Nat(+,*)
 
 -- 1. Напишите функцию lookup, которая принимает List A и натуральное число и возвращает элемент по заданому индексу.
 --    В общем случае эту функцию определить невозможно, т.к. индекс может быть больше, чем число элементов в списке.
@@ -80,12 +81,6 @@
 \func matMul {A : \Type} (z : A) (add mul : A -> A -> A) (n m k : Nat) (M : Mat A n m) (N : Mat A m k) : Mat A n k => {?}
 
 -- 11. Докажите, что reverse (reverse xs) = xs, где reverse определен через ++.
-
-\data List (A : \Type) | nil | cons A (List A)
-
-\func \infixl 4 ++ {A : \Type} (xs ys : List A) : List A \elim xs
-  | nil => ys
-  | cons x xs => cons x (xs ++ ys)
 
 \func reverse {A : \Type} (xs : List A) : List A
   | nil => nil
