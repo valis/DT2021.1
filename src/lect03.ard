@@ -1,0 +1,177 @@
+\import Utils
+\open Nat \hiding (<=)
+
+-- 1. Рекурсивное определение vec, head, tail.
+
+\func vec (A : \Type) (n : Nat) : \Type \elim n
+  | 0 => \Sigma
+  | suc n => \Sigma A (vec A n)
+
+\func head {A : \Type} (n : Nat) (xs : vec A (suc n)) => xs.1
+
+\func tail {A : \Type} (n : Nat) (xs : vec A (suc n)) => xs.2
+
+-- 2. Индуктивное определиние Vec, head, tail, append, length.
+
+\data Vec (A : \Type) (n : Nat) \elim n
+  | 0 => vnil
+  | suc n => vcons A (Vec A n)
+
+-- Конструкторы принимают параметры типа данных в качестве неявных аргументов.
+\func emptyList => nil {Nat}
+
+\func foo : Vec Nat 1 => vcons {Nat} {0} 100 vnil
+
+\func Head {A : \Type} {n : Nat} (xs : Vec A (suc n)) : A \elim xs
+  | vcons a xs => a
+
+\func Tail {A : \Type} {n : Nat} (xs : Vec A (suc n)) : Vec A n \elim xs
+  | vcons a xs => xs
+
+\func first {A : \Type} {n : Nat} (xs : Vec A n) : Maybe A \elim n, xs
+  | 0, vnil => nothing
+  | suc n, vcons a _ => just a
+
+\func append {A : \Type} {n m : Nat} (xs : Vec A n) (ys : Vec A m) : Vec A (m + n) \elim n, xs
+  | 0, vnil => ys
+  | suc n, vcons a xs => vcons a (append xs ys)
+
+-- Очень полезная функция.
+\func Fin-length {A : \Type} {n : Nat} (xs : Vec A n) => n
+
+\func bar => Fin-length (vcons 100 (vcons 101 vnil))
+
+-- 3. Fin, toNat, lookup.
+
+-- Тип n-элементных множеств можно определить различными способами.
+-- Например, мы можем определить его как подтип натуральных чисел:
+-- \func fin (n : Nat) => \Sigma (x : Nat) (T (x < n))
+
+\func Fin' (n : Nat) : \Set0
+  | 0 => Empty
+  | suc n => Maybe (Fin' n)
+
+-- Еще его можно определить индуктивно:
+\data Fin (n : Nat) \with
+  | suc n => {
+    | fzero
+    | fsuc (Fin n)
+  }
+
+-- Fin 0 -- пустой тип.
+\func Fin-absurd {A : \Type} (x : Fin 0) : A
+
+\func fin0 : Fin 3 => fzero
+\func fin1 : Fin 3 => fsuc fzero
+\func fin2 : Fin 3 => fsuc (fsuc fzero)
+-- \func fin3 : Fin 3 => fsuc (fsuc (fsuc fzero))
+
+-- Fin 3 has at least 3 elements.
+--
+
+-- В Fin 3 не более 3 элементов.
+\func atMost3 (x : Fin 3) : Either (x = fin0) (Either (x = fin1) (x = fin2))
+  | fzero => inl idp
+  | fsuc fzero => inr (inl idp)
+  | fsuc (fsuc fzero) => inr (inr idp)
+  | fsuc (fsuc (fsuc ()))
+
+\func toNat {n : Nat} (x : Fin n) : Nat \elim n, x
+  | suc n, fzero => 0
+  | suc n, fsuc x => suc (toNat x)
+
+-- Безопасный lookup.
+\func lookup {A : \Type} {n : Nat} (xs : Vec A n) (i : Fin n) : A \elim n, xs, i
+  | suc n, vcons a xs, fzero => a
+  | suc n, vcons a xs, fsuc i => lookup xs i
+
+-- 4. Data types may use non-structural recursion.
+
+\data Vec' (A : \Type) (n : Nat) \elim n
+  | 0 => vnil'
+  | suc n => vcons' A (Vec' A (suc n))
+
+\func Vec'-unique {A : \Type} {n : Nat} (xs : Vec' A (suc n)) : Empty \elim xs
+  | vcons' a xs => Vec'-unique xs
+
+-- 5. Симметричность, транзитивность, принцип Лейбница, pmap через него.
+
+-- Принцип Лейбница говорит, что если a и a' обладают одними и теми же свойствами, то они равны.
+-- Его легко доказать.
+\func Leibniz {A : \Type} {a a' : A}
+              (f : \Pi (P : A -> \Type) -> \Sigma (P a -> P a') (P a' -> P a)) : a = a'
+  => (f (a =)).1 idp
+
+-- Обратный принцип Лейбница (который мы тоже будем называть принципом Лейбница) говорит, что если a = a', то они обладают одними и теми же свойствами, т.е. если верно B a, то верно B a'.
+-- \func transport {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a'
+
+-- Используя принцип Лейбница, легко доказать (почти) все свойства равенства.
+-- Симметричность
+\func sym' {A : \Type} {a a' : A} (p : a = a') : a' = a
+  => transport (\lam x => x = a) p idp
+
+-- Транзитивность
+\func trans {A : \Type} {a a' a'' : A} (p : a = a') (q : a' = a'') : a = a''
+  => transport (\lam x => a = x) q p
+
+-- Конгруэнтность
+\func pmap' {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a'
+  => transport (\lam x => f a = f x) p idp
+
+-- 6. Коммутативность сложения.
+
+-- transport обладает следующим свойством:
+-- transport B idp b => b
+
+-- Транзитивность в инфиксной форме.
+-- \func \infixr 5 *> {A : \Type} {a a' a'' : A} (p : a = a') (q : a' = a'') : a = a''
+--   => transport (\lam x => a = x) q p
+
+-- Функции *> и sym обладает следующим свойством:
+-- p *> idp => p
+-- sym idp => idp
+-- Можно определить транзитивность <*, которая будем обладать свойством idp <* p => p, но она нам не понадобится.
+
+\func +-comm (n m : Nat) : n + m = m + n
+  | 0, 0 => idp
+  | 0, suc m => pmap suc (+-comm 0 m)
+  | suc n, 0 => pmap suc (+-comm n 0)
+  | suc n, suc m => pmap suc (+-comm (suc n) m *> pmap suc (sym (+-comm n m)) *> +-comm n (suc m))
+
+-- suc n + m = m + suc n == suc (m + n)
+-- suc m + n = n + suc m == suc (n + m)
+
+\func +-comm'' {n m : Nat} : n + m = m + n \elim n, m
+  | 0, 0 => idp
+  | 0, suc m => pmap suc +-comm''
+  | suc n, 0 => pmap suc +-comm''
+  | suc n, suc m => pmap suc (+-comm'' *> pmap suc (sym +-comm'') *> +-comm'')
+
+-- 8. Equational reasoning, коммутивность сложения через него.
+
+{-
+p : a = b
+q : b = c
+s : c = d
+
+p *> q *> s
+
+a  == {p}
+b  == {q}
+c  == {s}
+d
+ -}
+
+-- Используя equational reasoning, можно то же самое доказательство записать в более читаемой форме.
+\func +-comm' (n m : Nat) : n + m = m + n
+  | 0, 0 => idp
+  | 0, suc m => pmap suc (+-comm' 0 m)
+  | suc n, 0 => pmap suc (+-comm' n 0)
+  | suc n, suc m => pmap suc (
+    suc n + m   ==< +-comm' (suc n) m >==
+    m + suc n   ==< pmap suc (sym (+-comm' n m)) >==
+    n + suc m   ==< +-comm' n (suc m) >==
+    suc m + n   `qed)
+
+-- suc n + m = m + suc n == suc (m + n)
+-- suc m + n = n + suc m == suc (n + m)
