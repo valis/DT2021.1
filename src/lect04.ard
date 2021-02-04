@@ -1,0 +1,213 @@
+\import Utils
+\open Nat \hiding (<=)
+
+-- 1. Элиминаторы.
+
+{-
+\func h (b : Bool) : P b
+  | true => t
+  | false => f
+
+\func h' => Bool-elim P t f
+ -}
+
+-- Элиминатор для Bool (рекурсор для Bool -- это просто if).
+\func Bool-elim (P : Bool -> \Type)
+                (t : P true)
+                (f : P false)
+                (x : Bool) : P x \elim x
+  | true => t
+  | false => f
+
+\func Bool-rec (P : \Type)
+               (t : P)
+               (f : P)
+               (x : Bool) : P
+  => Bool-elim (\lam _ => P) t f x
+
+{-
+\func h (n : Nat) : P n
+  | zero => z
+  | suc n => s n (h n)
+
+\func h' => Bool-elim P t f
+ -}
+
+-- Элиминатор для Nat
+\func Nat-elim (P : Nat -> \Type)
+               (z : P zero)
+               (s : \Pi (n : Nat) -> P n -> P (suc n))
+               (x : Nat) : P x \elim x
+  | 0 => z
+  | suc x => s x (Nat-elim P z s x)
+
+-- Рекурсор для Nat
+\func Nat-rec (P : \Type)
+              (z : P)
+              (s : Nat -> P -> P)
+              (x : Nat) : P
+  => Nat-elim (\lam _ => P) z s x
+
+-- 2. Оператор J.
+
+-- Оператор J является обобщением transport.
+-- Если transport -- это независимый элиминатор, то J -- его зависимая версия.
+
+-- Можно сравнить с элиминаторами для Nat.
+{-
+-- Независимая версия:
+\func Nat-rec (B : \Type)
+    (z : B)
+    (s : Nat -> B -> B)
+    (n : Nat)
+    : B \elim n
+    | 0 => z
+    | suc n => s n (Nat-rec B z s n)
+
+-- Зависимая версия:
+\func Nat-elim (B : Nat -> \Type)
+    (z : B 0)
+    (s : \Pi (k : Nat) -> B k -> B (suc k))
+    (n : Nat)
+    : B n \elim n
+    | 0 => z
+    | suc n => s n (Nat-elim B z s n)
+-}
+
+-- Независимая версия:
+\func transport''''
+  {A : \Type}
+  {a a' : A}
+  (B : A -> \Type)
+  (b : B a)
+  (p : a = a')
+  : B a' \elim p
+  | idp => b
+
+-- Зависимая версия:
+\func J
+  {A : \Type} {a : A}
+  (B : \Pi (a' : A) -> a = a' -> \Type)
+  (b : B a idp)
+  {a' : A} (p : a = a')
+  : B a' p \elim p
+  | idp => b
+
+-- Напоминание как выглядит элиминатор для Unit.
+\data Unit | unit
+
+\func Unit-elim
+  (B : Unit -> \Type)
+  (b : B unit)
+  (p : Unit)
+  : B p
+\elim p
+  | unit => b
+
+\func Unit-singleton (x : Unit) : x = unit
+  => Unit-elim (\lam x => x = unit) idp x
+
+-- Если переписать тип B в некаррированом виде, то получится следующая версия того же оператора:
+-- Этот элиминатор в точности является элиминатором для Unit.
+-- Таким образом, J говорит, что в типе \Sigma (a' : A) (a = a') ровно один элемент.
+\func J'
+  {A : \Type} {a : A}
+  (B : (\Sigma (a' : A) (a = a')) -> \Type)
+  (b : B (a, idp))
+  (p : \Sigma (a' : A) (a = a'))
+  : B p
+  => J (\lam a' p => B (a',p)) b p.2
+
+-- Это утверждение не типизируется.
+-- \func =-unique' {A : \Type} {a a' : A} (p : a = a') : p = idp => {?}
+
+-- Это утверждение типизируется, но не верно, т.е. в типе a = a может быть больше одного элемента.
+-- \func =-unique {A : \Type} {a : A} (p : a = a) : p = idp => {?}
+
+-- J говорит, что для определения функции над a = a' достаточно определить ее для idp.
+-- При этом a' должен варьироваться вместе с a'.
+-- Если мы определим версию J, в которой a' всегда равно a, то мы получим оператор K:
+{-
+\func K {A : \Type} {a : A} (B : a = a -> \Type)
+    (b : B idp)
+    (p : a = a) : B p => {?}
+-}
+-- Этот оператор эквивалентен =-unique.
+-- Следовательно его невозможно доказать.
+-- Его можно добавить как аксиому, но мы не будем этого делать.
+-- Мы будем обсуждать его подробнее позже.
+
+-- 3. Ассоциативность ++ для векторов.
+
+\open Nat \hiding (<=)
+
+\func +-assoc (n m k : Nat) : n + (m + k) = (n + m) + k \elim k
+  | 0 => idp
+  | suc k => pmap suc (+-assoc n m k)
+
+-- Ассоциативность для v++ даже сформулировать сложно, так как у (xs v++ ys) v++ zs и xs v++ (ys v++ zs) разные типы: Vec A (k + (m + n)) и Vec A ((k + m) + n).
+-- Это можно поправить при помощи transport, так как он позволяет любой элемент Vec A x превратить в элемент Vec A y, если x и y равны.
+\func v++-assoc {A : \Type} {n m k : Nat}
+                (xs : Vec A n) (ys : Vec A m) (zs : Vec A k)
+  : transport (Vec A) (+-assoc k m n) ((xs v++ ys) v++ zs) = xs v++ (ys v++ zs)
+  \elim n, xs
+    | 0, vnil => idp
+    | suc n, vcons a xs => {?}
+  \where {
+    \func vcons-lem {A : \Type} {n m : Nat} (p : n = m) (xs : Vec A n) (x : A)
+      : transport (Vec A) (pmap suc p) (vcons x xs) = vcons x (transport (Vec A) p xs)
+      => J (\lam m' p' => transport (Vec A) (pmap suc p') (vcons x xs) = vcons x (transport (Vec A) p' xs))
+          idp p
+  }
+
+
+{-
+\func v++-assoc' {A : \Type} {n m k : Nat}
+                (xs : Vec A n) (ys : Vec A m) (zs : Vec A k)
+  : (xs v++ ys) v++ zs = transport (Vec A) (+-assoc' k m n) (xs v++ (ys v++ zs)) \elim n, xs
+  | 0, vnil => idp
+  | suc n, vcons x xs =>
+        pmap (vcons x) (v++-assoc' xs ys zs) *> -- Чтобы доказать это утверждение, мы сначала используем индукционную гипотезу.
+                                               -- После этого нам нужно доказать, что
+                                               -- vcons x (transport (Vec A) (+-assoc' k m n) (xs v++ (ys v++ zs))) =
+                                               -- transport (Vec A) (pmap suc (+-assoc' k m n)) (vcons x (xs v++ (ys v++ zs))
+                                               -- Мы обобщаем это утверждение и доказываем его не только для +-assoc' k m n, а для любых e : Nat и p : k + m + n = e.
+                                               -- Первым аргументом J передается это обобщенное утверждение.
+                                               -- После этого остается только доказать его для случае p == idp.
+                                               -- А в этом случае это верно по рефлексивности (это второй аргумент J).
+        J (\lam e (p : k + m + n = e) =>
+                    vcons x (transport (Vec A) p (xs v++ (ys v++ zs))) =
+                    transport (Vec A) (pmap suc p) (vcons x (xs v++ (ys v++ zs))))
+          idp
+          (+-assoc' k m n)
+
+\func +-assoc' (n m k : Nat) : (n + m) + k = n + (m + k) \elim k
+  | 0 => idp
+  | suc k => pmap suc (+-assoc' n m k)
+-}
+
+-- 4. Matching with idp
+
+\func jj {A : \Type} (B : A -> \Type) {a a' : A} (g : A -> A) (b : B a) (p : g a' = a) : A \elim p
+  | idp => g a'
+
+-- 5. Доказательства неравенств.
+
+-- Чтобы доказать, что true не равно false, достаточно определить функцию T : Bool -> \Type, которая на true равна населенному типу, а на false пустому.
+-- Тогда из true = false легко вывести противоречие, используя transport.
+\func true/=false (p : true = false) : Empty
+  => transport T p ()
+
+-- A : \Type
+-- a, a' : A
+
+-- f : A -> B
+-- a = a' -> f a = f a'
+-- Not (f a = f a') -> Not (a = a')
+
+-- (P -> Q) -> Not Q -> Not P
+
+\func true/=false' (p : true = false) : Empty
+
+\func true/=false'' (p : true = false) : Empty
+  => \case p \with {}
