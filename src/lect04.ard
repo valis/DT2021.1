@@ -152,7 +152,8 @@
   : transport (Vec A) (+-assoc k m n) ((xs v++ ys) v++ zs) = xs v++ (ys v++ zs)
   \elim n, xs
     | 0, vnil => idp
-    | suc n, vcons a xs => {?}
+    | suc n, vcons a xs => vcons-lem (+-assoc k m n) ((xs v++ ys) v++ zs) a *>
+                            pmap (vcons a) (v++-assoc xs ys zs)
   \where {
     \func vcons-lem {A : \Type} {n m : Nat} (p : n = m) (xs : Vec A n) (x : A)
       : transport (Vec A) (pmap suc p) (vcons x xs) = vcons x (transport (Vec A) p xs)

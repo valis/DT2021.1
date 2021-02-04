@@ -13,6 +13,13 @@
   | con2 D D
   | con3 (Nat -> D)
 
+{- To check that the definition of D-elim and D-rec is correct, you can try to implement foo using D-rec.
+\func foo (d : D) : Nat
+  | con1 n => n
+  | con2 d1 d2 => foo d1 Nat.+ foo d2
+  | con3 g => foo (g (foo (g 100)))
+-}
+
 -- 4. Определите рекурсор и элиминатор для List.
 
 -- 5. Докажите pmap при помощи паттерн матчинга с idp.
