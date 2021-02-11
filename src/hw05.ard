@@ -1,0 +1,70 @@
+\import Utils
+
+-- 1. Докажите, что (\lam x => not (not x)) = (\lam x => x).
+
+\func notNotId : (\lam x => not (not x)) = (\lam x => x) => {?}
+
+-- 2. Докажите, что fac не равен suc.
+
+\open Nat(*)
+
+\func fac (n : Nat) : Nat
+  | 0 => 1
+  | suc n => suc n * fac n
+
+\func fac/=suc (p : fac = suc) : Empty => {?}
+
+-- 3. Докажите, что left = right, не используя transport, coe и паттерн матчинг с idp.
+
+\func left=right : left = right => {?}
+
+-- 4. Докажите, что если a = a' и b = b', то (a,b) = (a',b'), не используя transport, coe и паттерн матчинг с idp.
+
+\func pairEq {A B : \Type} {a a' : A} {b b' : B} (p : a = a') (q : b = b') : (a,b) = (a',b') => {?}
+
+-- 5. Докажите, что если p = p', то p.1 = p'.1, не используя transport, coe и паттерн матчинг с idp.
+
+\func projEq {A : \Type} (B : A -> \Type) {p p' : \Sigma (x : A) (B x)} (t : p = p') : p.1 = p'.1 => {?}
+
+-- 6. Докажите pmap2, не используя transport, coe и паттерн матчинг с idp.
+
+\func pmap2' {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' => {?}
+
+-- 7. Мы видели как определить transport через coe. Определите частный случай coe через transport.
+
+\func coe0 (A : I -> \Type) (a : A left) : A right => {?}
+
+-- 8. Определите функцию B right -> B left.
+
+\func Itr' {B : I -> \Type} (b : B right) : B left => {?}
+
+-- 9. Определите предикат принадлежности элемента списку.
+
+\data In {A : \Type} (a : A) (xs : List A)
+
+-- Optional:
+-- 10. Докажите эквивалентность четырех различных определений LessOrEq: lessOrEq, lessOrEq', LessOrEq и LessOrEq'.
+
+-- 11. Определите рефлексивное транзитивное замыкание отношения.
+--     То есть ReflTransClosure R -- это минимальное рефлексивное и транзитивное отношение, содержащее R.
+
+\data ReflTransClosure {A : \Type} (R : A -> A -> \Type) (x y : A)
+
+-- 12. Докажите, что если R уже рекфлексивно и транзитивно, то ReflTransClosure R эквивалентно R.
+
+\func ReflTransClosure-lem {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z)
+  : \Pi (x y : A) -> R x y <-> ReflTransClosure R x y
+  => {?}
+
+-- 13. Определите предикат Sublist xs ys на списках, означающий "список xs является подсписком ys".
+
+-- 14. Докажите, что Sublist (filter p xs) xs для любых p и xs.
+
+-- 15. Определите filter через if, а не через \case.
+--     Докажите для этой версии filter лемму filter-lem.
+
+\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A => {?}
+
+\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : length (filter' p xs) Nat.<= length xs => {?}
+
+-- 16. Закончите определение функции \func BoolFuncLem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x из лекции.
