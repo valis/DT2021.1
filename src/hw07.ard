@@ -1,0 +1,31 @@
+\import Utils
+\import lect06 (Functor)
+\import lect07
+\open Nat(+,*)
+
+-- 1. Реализуйте функцию filter и докажите ее корректность, то есть, что выполнены следующие условия:
+--    * filter p xs является подсписком xs
+--    * Все элементы filter p xs удовлетворяют предикату p
+--    * Любой подсписок xs с тем же свойством является подсписком filter p xs
+
+-- 2. Докажите, что предикат isEven разрешим.
+
+\func isEven (n : Nat) => \Sigma (k : Nat) (n = 2 * k)
+
+\func isEven-dec : DecPred isEven => {?}
+
+-- 3. Докажите, что если равенство элементов A разрешимо, то и равенство элементов List A тоже разрешимо.
+
+\instance ListEq {A : \Type} (dec : Eq A) : Eq (List A)
+  | decideEq => {?}
+
+-- 4. Докажите, что функции FromBoolToDec и FromDecToBool взаимно обратны.
+
+\func bdb {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p => {?}
+
+-- Мы не можем доказать, что FromBoolToDec (FromDecToBool P) = P, но мы можем доказать более слабое утверждение: эти предикаты логически эквивалентны.
+-- Для этого введем эквивалентность предикатов.
+
+\func dbd {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P))
+  : \Pi (x : A) -> (FromBoolToDec (FromDecToBool P)).1 x <-> P.1 x
+  => {?}

@@ -1,0 +1,255 @@
+\import Function.Meta
+\import Logic.Meta
+\import Meta
+\import Paths.Meta
+\import Utils
+\import lect03 (+-comm)
+\import lect06
+
+-- 1. Полнота спецификации.
+
+-- Спецификация для некоторого значения a типа A -- это просто предикат вида P : A -> \Type.
+-- То есть спецификация -- это просто свойство элемента, которое мы хотим про него доказать.
+
+-- Спецификация корректна, если верно P a.
+-- Спецификация полна, если P x влечет x = a для любого x : A.
+
+-- Например, пусть у нас есть функция, вычисляющая факториал fac : Nat -> Nat.
+-- P1 -- корретная спецификация для fac, но не полная.
+-- \func P1 (f : Nat -> Nat) => f 3 = 6
+-- P2 -- полная, но не корректная
+-- \func P2 (f : Nat -> Nat) => Empty
+-- P3 -- полная и корректная спецификация для fac.
+-- \func P3 (f : Nat -> Nat) => \Sigma (f 0 = 1) (\Pi (n : Nat) -> f (suc n) = suc n * f n)
+
+-- Полная и корректная спецификация для функции сортировки:
+-- \func P (f : List A -> List A) => \Pi (xs : List A) -> \Sigma (isSorted (f xs)) (isPerm (f xs) xs)
+-- где isSorted xs верно тогда и только тогда, когда список xs отсортирован, а isPerm xs ys верно тогда и только список xs является перестановкой списка ys.
+
+-- Разумеется, мы хотим, чтобы спецификация была, по крайней мере, корректной.
+-- Мы можем не требовать полноты, если полную спецификацию слишком сложно проверить, и нам достаточно истинности частичной спецификации.
+-- Тем не менее полезно понимать когда спецификация является полной.
+
+-- Есть простое необходимое (и достаточное для корректных спецификаций) условие полноты, которое не зависит от элемента, для которого задается спецификация:
+-- \Pi (x y : A) -> P x -> P y -> x = y
+-- То есть должно существовать не более одного элемента, на котором предикат верен.
+
+-- 2. Корректность сортировки.
+
+-- DecLinear = Total + DecEq
+
+\func sort {A : TotalPreorder} (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons x xs => insert x (sort xs)
+  \where {
+    \func insert {A : TotalPreorder} (x : A) (xs : List A) : List A \elim xs
+      | nil => cons x nil
+      | cons y ys => \case totality x y \with {
+        | inl x<=y => cons x (cons y ys)
+        | inr y<=x => cons y (insert x ys)
+      }
+  }
+
+\func sort-perm {A : TotalPreorder} (xs : List A) : Perm xs (sort xs) \elim xs
+  | nil => perm-nil
+  | cons a xs => perm-trans (perm-cons idp (sort-perm xs)) (insert-perm a (sort xs))
+  \where {
+    \func insert-perm {A : TotalPreorder} (x : A) (xs : List A)
+      : Perm (cons x xs) (insert x xs) \elim xs
+      | nil => perm-cons idp perm-nil
+      | cons y ys => mcases \with {
+        | inl x<=y => perm-refl
+        | inr y<=x => perm-trans (perm-swap idp idp idp) (perm-cons idp (insert-perm x ys))
+      }
+  }
+
+\data Perm {A : \Type} (xs ys : List A) \elim xs, ys
+  | nil, nil => perm-nil
+  | xs, ys => perm-trans {zs : List A} (Perm xs zs) (Perm zs ys)
+  | cons x xs, cons y ys => perm-cons (x = y) (Perm xs ys)
+  | cons x (cons x' xs), cons y (cons y' ys) => perm-swap (x = y') (x' = y) (xs = ys)
+
+\func perm-refl {A : \Type} {xs : List A} : Perm xs xs \elim xs
+  | nil => perm-nil
+  | cons a xs => perm-cons idp perm-refl
+
+\open sort
+
+\func headDef {A : \Type} (def : A) (xs : List A) : A \elim xs
+  | nil => def
+  | cons x _ => x
+
+\data Sorted {A : Preorder} (xs : List A) \elim xs
+  | nil => sorted-nil
+  | cons x xs => sorted-cons (x <= headDef x xs) (Sorted xs)
+
+\func sort-sorted {A : TotalPreorder} (xs : List A) : Sorted (sort xs) \elim xs
+  | nil => sorted-nil
+  | cons x xs => insert-sorted x (sort xs) (sort-sorted xs)
+  \where {
+    \func insert-aux {A : TotalPreorder} (x y : A) (ys : List A)
+                     (y<=x : y <= x) (y<=ys : y <= headDef y ys)
+      : y <= headDef y (insert x ys) \elim ys
+      | nil => y<=x
+      | cons a ys => mcases \with {
+        | inl x<=y => y<=x
+        | inr y<=x1 => y<=ys
+      }
+
+    \func insert-sorted {A : TotalPreorder} (x : A) (xs : List A) (s : Sorted xs)
+      : Sorted (insert x xs) \elim xs
+      | nil => sorted-cons <=-refl sorted-nil
+      | cons y ys => mcases \with {
+        | inl x<=y => sorted-cons x<=y s
+        | inr y<=x => \case s \with {
+          | sorted-cons y<=ys s' => sorted-cons (insert-aux x y ys y<=x y<=ys) (insert-sorted x ys s')
+        }
+      }
+  }
+
+-- 3. rewrite: pmap, trans, sym
+
+\func pmap' {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a'
+  => rewrite p idp
+
+\func trans' {A : \Type} {a a' a'' : A} (p : a = a') (q : a' = a'') : a = a''
+  => rewrite p q
+
+\func sym' {A : \Type} {a a' : A} (p : a = a') : a' = a
+  => rewrite p idp
+
+-- 4. run
+
+\func foo {a a' a1 a2 : Nat} (p : a = a') (q : a' = a1) (r : a1 = a2)
+  : a = a2
+  => run {
+       rewrite p,
+       rewrite q,
+       rewrite r,
+       idp
+     }
+  -- rewrite p $ rewrite q $ rewrite r idp
+  -- rewrite p (rewrite q (rewrite r idp))
+
+\func foo' {a a' a1 : Nat} (p : a = a') (q : a = a1)
+  : a' = a1
+  => run {
+    rewrite p at q,
+    q
+  }
+
+\func foo'' (x y : Nat) (P : Nat -> \Type) (p : P (y Nat.+ x)) : P (x Nat.+ y)
+  => rewrite +-comm p
+
+-- 5. mcases
+
+\func not-isInv (b : Bool) : not (not b) = b
+  => mcases {not,2} \with {
+    | true => idp
+    | false => idp
+  }
+
+-- 6. Meta resolvers.
+
+\func exists (A : \Type) (B : A -> \Type) => \Sigma (x : A) (B x)
+
+\func bar => Exists (nnn : Nat) (nnn = nnn)
+
+-- 7. Разрешимые предикаты.
+
+-- Предикат -- это функция вида P : A -> \Type.
+-- Предикат называется разрешимым, если существует алгоритм, разрешающий его, то есть по a : A возвращающий true, если P a верно, и false, если ложно.
+
+-- Так как у нас логика интуиционистская, то не все предикаты разрешимы.
+-- На самом деле, исключенное третье эквивалентно утверждению о том, что все предикаты разрешимы.
+
+-- Пример неразрешимого предиката, который мы запишем неформально, так как его формальное описание будет довольно длинным.
+-- P : Nat -> \Type
+-- P n = "останавливается ли машина Тьюринга с номером n на входе n"
+--
+-- Мы не можем ни доказать, что P разрешим, ни опровергнуть это, так как мы не предполагаем ни исключенное третье, ни его отрицание.
+--
+-- Более простой пример неразрешимого предиката -- это предикат равенства двух функций типа Nat -> Nat.
+
+-- Мы можем определить предикат разрешимости на предикатах.
+\data Decide (A : \Type)
+  | yes A
+  | no (A -> Empty)
+
+-- DecPred P верно в тогда и только тогда, когда P разрешим.
+\func DecPred {A : \Type} (P : A -> \Type) => \Pi (a : A) -> Decide (P a)
+
+-- Например, предикат \lam n => n = 0 разрешим.
+\func decide0 : DecPred (\lam (n : Nat) => n = 0) => \lam n => \case \elim n \with {
+  | 0 => yes idp
+  | suc n => no (\case __ \with {})
+}
+
+\func LEM (A : \Type) : Decide A
+  => {?}
+
+-- Если верно исключенное третье, то все предикаты разрешимы.
+
+-- 8. Разрешимое равенство.
+
+-- Мы можем определить класс типов, являющийся аналогом Eq в хаскелле, но в котором вместо функции == : A -> A -> Bool будет хранится доказательство, что равенство разрешимо.
+-- Это лучше, так как в хаскелле в качестве == мы можем написать вообще произвольную функцию, даже такую, которая не имеет никакого смысла.
+-- А при таком определении Eq функция равенства всегда будет определена корректно.
+\class Eq (A : \Type) {
+  | decideEq (a a' : A) : Decide (a = a')
+  -- Функции, объявленные внутри класса принимают неявно инстанс этого класса в качестве первого аргумента.
+  \func \infix 4 == (a a' : A) : Bool => \case decideEq a a' \with {
+    | yes _ => true
+    | no _ => false
+  }
+} \where {
+  -- Функция == выше полностью эквивалентна функции =='.
+  \func \infix 4 ==' {e : Eq} (a a' : e.A) : Bool => \case decideEq a a' \with {
+    | yes _ => true
+    | no _ => false
+  }
+}
+
+\open Eq(==)
+
+\func pred (n : Nat) : Nat
+  | 0 => 0
+  | suc n => n
+
+-- Докажем, что равенство натуральных чисел разрешимо.
+\instance NatEq : Eq Nat
+  | decideEq (n m : Nat) : Decide (n = m) \with {
+    | 0, 0 => yes idp
+    | 0, suc m => no (\case __ \with {})
+    | suc n, 0 => no (\case __ \with {})
+    | suc n, suc m => \case decideEq n m \with {
+      | yes n=m => yes (pmap suc n=m)
+      | no n/=m => no (\lam sn=sm => n/=m (pmap pred sn=sm))
+    }
+  }
+
+\func test1 : (0 == 0) = true => idp
+\func test2 : (0 == 1) = false => idp
+
+-- DecEq A верно в точности тогда, когда предикат равенства на A разрешим.
+\func DecEq (A : \Type) => \Pi (a a' : A) -> Decide (a = a')
+
+-- 9. Предикаты A -> Bool
+
+-- Разрешимые предикаты вида A -> \Type в точности соответствуют функциям вида A -> Bool.
+
+-- Легко построить функции из A -> Bool в тип разрешимых предикатов и наоборот.
+-- Эти функции почти взаимно обратны. Это будет верно, если правильно сформулировать это утверждение.
+\func FromBoolToDec {A : \Type} (p : A -> Bool)
+  : \Sigma (P : A -> \Type) (DecPred P)
+  => (\lam a => T (p a), \lam a => mcases {T} \with {
+    | true => yes ()
+    | false => no absurd
+  })
+
+\func FromDecToBool {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P))
+  : A -> Bool
+  => \lam a => \case P.2 a \with {
+    | yes _ => true
+    | no _ => false
+  }
