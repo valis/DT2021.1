@@ -1,0 +1,445 @@
+\import Algebra.Meta
+\import Data.Bool
+\import Data.List
+\import Data.Or
+\import Logic.Meta
+\import Meta
+\import Order.LinearOrder
+\import Order.StrictOrder
+\import Paths (*>, inv, pmap, transport, transport2, transportInv)
+\import Paths.Meta
+\import Utils (Maybe, Not, just, maybe, nothing)
+\import hw08
+\import lect07 (Decide, no, yes)
+\open LinearOrder
+
+-- 1. Полнота спецификации для sort
+
+-- Perm (sort' l) l
+-- Perm (sort l) l
+-- Sorted (sort' l)
+-- Sorted (sort l)
+-- We want to show that these 4 properties imply sort l = sort l'
+
+-- It is enough to show the following implication:
+-- Sorted l -> Sorted l' -> Perm l l' -> l = l'
+
+-- We can show that Perm l l' <-> sort l = sort l'
+
+-- 2.
+
+\truncated \data Perm {A : \Type} (xs ys : List A) : \Prop \elim xs, ys
+  | nil, nil => perm-nil
+  | :: x xs, :: y ys => perm-:: (x = y) (Perm xs ys)
+  | :: x (:: x' xs), :: y (:: y' ys) => perm-swap (x = y') (x' = y) (xs = ys)
+  | xs, ys => perm-trans {zs : List A} (Perm xs zs) (Perm zs ys)
+
+\lemma perm-refl {A : \Type} {xs : List A} : Perm xs xs \elim xs
+  | nil => perm-nil
+  | :: a l => perm-:: idp perm-refl
+
+\data Sorted {A : Dec} (xs : List A) \elim xs
+  | nil => sorted-nil
+  | :: x xs => sorted-cons (x <= headDef x xs) (Sorted xs)
+  \where {
+    \lemma allSorted {A : Dec} {a1 a2 : A} (l1 l2 : List A) (s : Sorted (a1 :: l1 ++ a2 :: l2)) : a1 <= a2
+      => aux a1 (a1 :: l1) l2 s
+      \where
+        \lemma aux {A : Dec} (a' : A) {a : A} (l1 l2 : List A) (s : Sorted (l1 ++ a :: l2)) : headDef a' (l1 ++ a :: l2) <= a \elim l1, s
+          | nil, sorted-cons _ s => <=-equals idp
+          | :: a1 l1, sorted-cons a1<=h s => Dec.=>TotalOrder.<=-transitive a1<=h (aux a1 l1 l2 s)
+
+    \lemma headSorted {A : Dec} {l1 l2 : List A} (s : Sorted (l1 ++ l2)) : Sorted l1 \elim l1, s
+      | nil, _ => sorted-nil
+      | :: a nil, sorted-cons e s => sorted-cons (<=-equals idp) (headSorted s)
+      | :: a (:: _ _), sorted-cons e s => sorted-cons e (headSorted s)
+
+    \lemma tailSorted {A : Dec} (l1 l2 : List A) (s : Sorted (l1 ++ l2)) : Sorted l2 \elim l1, s
+      | nil, s => s
+      | :: a l1, sorted-cons _ s => tailSorted l1 l2 s
+  }
+
+\module Insertion \where {
+  \func sort {A : Dec} (xs : List A) : List A
+    | nil => nil
+    | :: a xs => insert a (sort xs)
+    \where {
+      \func insert {A : Dec} (a : A) (xs : List A) : List A \elim xs
+        | nil => a :: nil
+        | :: x xs => \case dec<_<= x a \with {
+          | inl x<a => x :: insert a xs
+          | inr a<=x => a :: x :: xs
+        }
+    }
+
+  \open sort
+
+  \lemma sort-sorted {A : Dec} (xs : List A) : Sorted (sort xs) \elim xs
+    | nil => sorted-nil
+    | :: a xs => insert-sorted a (sort-sorted xs)
+    \where {
+      \lemma insert-sorted {A : Dec} (a : A) {xs : List A} (s : Sorted xs) : Sorted (sort.insert a xs) \elim xs, s
+        | nil, _ => sorted-cons (<=-equals idp) sorted-nil
+        | :: a1 xs, sorted-cons p s1 \as s2 => mcases \with {
+          | inl a1<a => sorted-cons (\case \elim xs, \elim p \with {
+            | nil, _ => <=-less a1<a
+            | :: a2 xs, a1<=a2 => mcases \with {
+              | inl _ => a1<=a2
+              | inr _ => <=-less a1<a
+            }
+          }) (insert-sorted a s1)
+          | inr a<=a1 => sorted-cons a<=a1 s2
+        }
+    }
+
+  \lemma sort-perm {A : Dec} (xs : List A) : Perm xs (sort xs) \elim xs
+    | nil => perm-nil
+    | :: a l => perm-trans (perm-:: idp (sort-perm l)) (insert-perm a (sort l))
+    \where {
+      \lemma insert-perm {A : Dec} (a : A) (xs : List A)
+        : Perm (a :: xs) (insert a xs) \elim xs
+        | nil => perm-:: idp perm-nil
+        | :: b xs => mcases \with {
+          | inl b<=a => perm-trans (perm-swap idp idp idp) (perm-:: idp (insert-perm a xs))
+          | inr a<=b => perm-refl
+        }
+
+      \lemma insert-comm {A : Dec} (a a' : A) (l : List A)
+        : insert a (insert a' l) = insert a' (insert a l)
+        => \case trichotomy a a' \with {
+          | less a<a' => aux a<a' l
+          | equals a=a' => rewrite a=a' idp
+          | greater a'<a => inv (aux a'<a l)
+        }
+        \where {
+          \lemma aux {A : Dec} {a a' : A} (a<a' : a < a') (l : List A)
+            : insert a (insert a' l) = insert a' (insert a l) \elim l
+            | nil => mcases contradiction \with {
+              | inl x<a, inr a<=x => idp
+              | inr a<=x, inl x<a => idp
+            }
+            | :: a1 l => mcases {2} \with {
+              | inl a1<a => run {
+                rewrite (dec<_reduce (<-transitive a1<a a<a')),
+                rewrite (dec<_reduce a1<a),
+                pmap (a1 ::) (aux a<a' l)
+              }
+              | inr a<=a1 => run {
+                rewrite (dec<_reduce a<a'),
+                mcases \with {
+                  | inl a1<a' => rewrite (dec<=_reduce a<=a1) idp
+                  | inr a'<=a1 => rewrite (dec<=_reduce (<=-less a<a')) idp
+                }
+              }
+            }
+        }
+    }
+}
+
+
+
+
+\module TreeSort \where {
+  \data Tree (A : \Type) | leaf | branch (Tree A) A (Tree A)
+
+  \func sort {A : Dec} (l : List A) => treeToList (buildTree l)
+    \where
+      \func buildTree {A : Dec} (l : List A) : Tree A \elim l
+        | nil => leaf
+        | :: a l => insert a (buildTree l)
+
+  \func treeToList {A : \Type} (t : Tree A) : List A \elim t
+    | leaf => nil
+    | branch t1 a t2 => treeToList t1 ++ a :: treeToList t2
+
+  \func insert {A : Dec} (a : A) (t : Tree A) : Tree A \elim t
+    | leaf => branch leaf a leaf
+    | branch l1 a1 l2 => \case dec<_<= a1 a \with {
+      | inl a1<a => branch l1 a1 (insert a l2)
+      | inr a<=a1 => branch (insert a l1) a1 l2
+    }
+}
+
+
+
+
+
+
+
+
+
+\module RedBlack \where {
+  \func sort {A : Dec} (l : List A) => rbTreeToList (buildTree l rbLeaf) nil
+    \where {
+      \data Color | red | black
+
+      \data RBTree (A : \Type) | rbLeaf | rbBranch Color (RBTree A) A (RBTree A)
+
+      \func rbTreeToList {A : \Type} (t : RBTree A) (r : List A) : List A \elim t
+        | rbLeaf => r
+        | rbBranch _ t1 a t2 => rbTreeToList t1 (a :: rbTreeToList t2 r)
+
+      \func buildTree {A : Dec} (l : List A) (\strict r : RBTree A) : RBTree A \elim l
+        | nil => r
+        | :: a l => buildTree l (repaint (insert a r))
+
+      \func repaint {A : \Type} (t : RBTree A) : RBTree A
+        | rbBranch red l a r => rbBranch black l a r
+        | t => t
+
+      \func insert {A : Dec} (a : A) (t : RBTree A) : RBTree A \elim t
+        | rbLeaf => rbBranch red rbLeaf a rbLeaf
+        | rbBranch c l1 a1 l2 => \case dec<_<= a1 a \with {
+          | inl a1<a => balanceRight c l1 a1 (insert a l2)
+          | inr a<=a1 => balanceLeft c (insert a l1) a1 l2
+        }
+
+      -- balanceLeft black (rbBranch red a x (rbBranch red b y c)) /=> rbBranch red (rbBranch black a x b) y (rbBranch black c v r)
+      \func balanceLeft {A : \Type} (c : Color) (\strict l : RBTree A) (v : A) (r : RBTree A) : RBTree A \elim c, l
+        | black, rbBranch red (rbBranch red a x b) y c => rbBranch red (rbBranch black a x b) y (rbBranch black c v r)
+        | black, rbBranch red a x (rbBranch red b y c) => rbBranch red (rbBranch black a x b) y (rbBranch black c v r)
+        | c, a => rbBranch c a v r
+
+      \func balanceRight {A : \Type} (c : Color) (l : RBTree A) (v : A) (\strict r : RBTree A) : RBTree A \elim c, r
+        | black, rbBranch red (rbBranch red b y c) z d => rbBranch red (rbBranch black l v b) y (rbBranch black c z d)
+        | black, rbBranch red b y (rbBranch red c z d) => rbBranch red (rbBranch black l v b) y (rbBranch black c z d)
+        | c, b => rbBranch c l v b
+    }
+
+  \open sort
+
+  \func toList {A : \Type} (t : RBTree A) : List A \elim t
+    | rbLeaf => nil
+    | rbBranch _ t1 a t2 => toList t1 ++ a :: toList t2
+    \where {
+      \lemma =rbTreeToList {A : \Set} (t : RBTree A) : rbTreeToList t nil = toList t
+        => aux t nil *> ++_nil
+        \where
+          \lemma aux {A : \Set} (t : RBTree A) (l : List A) : rbTreeToList t l = toList t ++ l \elim t
+            | rbLeaf => idp
+            | rbBranch c t1 a t2 => aux t1 (a :: rbTreeToList t2 l) *> pmap (toList t1 ++ a :: __) (aux t2 l) *> inv ++-assoc
+    }
+
+  \lemma sort=insert {A : Dec} (l : List A) : sort l = Insertion.sort l
+    => toList.=rbTreeToList _ *> aux=makeTree l nil *> pmap (\lam s => toList (makeTree s)) ++_nil *> toList_mkTree l
+    \where {
+      -- Определим обычную функцию построения дерева и докажем, что она совпадает с хвосто-рекурсивной
+      \func makeTree {A : Dec} (l : List A) : RBTree A \elim l
+        | nil => rbLeaf
+        | :: a l => repaint (insert a (makeTree l))
+
+      \lemma aux=makeTree {A : Dec} (l l' : List A) : toList (buildTree l (makeTree l')) = toList (makeTree (l ++ l')) \elim l
+        | nil => idp
+        | :: a l => aux=makeTree l (a :: l') *> makeTree_insert a l l'
+        \where {
+          \lemma makeTree_insert {A : Dec} (a : A) (l l' : List A) : toList (makeTree (l ++ a :: l')) = toList (repaint (insert a (makeTree (l ++ l')))) \elim l
+            | nil => idp
+            | :: a' l => toList_repaint _ *> toList_insert a' _ *> pmap (Insertion.sort.insert a') (makeTree_insert a l l' *> toList_repaint _ *> toList_insert a _) *> Insertion.sort-perm.insert-comm a' a _ *> inv (
+                          toList_repaint _ *>
+                          toList_insert' a _ (transportInv Sorted (toList_repaint _ *> toList_insert a' _) (Insertion.sort-sorted.insert-sorted a' (makeTree-sorted _))) *>
+                          pmap (Insertion.sort.insert a) (toList_repaint _ *> toList_insert a' _))
+
+          \lemma toList_insert {A : Dec} (a : A) (l : List A) : toList (insert a (makeTree l)) = Insertion.sort.insert a (toList (makeTree l))
+            => toList_insert' a (makeTree l) (makeTree-sorted l)
+
+          \lemma makeTree-sorted {A : Dec} (l : List A) : Sorted (toList (makeTree l))
+            => rewrite toList_mkTree (Insertion.sort-sorted l)
+        }
+
+      -- Это основное утверждение
+      \lemma toList_mkTree {A : Dec} (l : List A)
+        : toList (makeTree l) = Insertion.sort l \elim l
+        | nil => idp
+        | :: a l => run {
+          rewrite toList_repaint,
+          rewrite (toList_insert' a (makeTree l) (rewrite toList_mkTree (Insertion.sort-sorted l))),
+          pmap (Insertion.sort.insert a) (toList_mkTree l)
+        }
+
+      -- Для доказательства toList_mkTree нам понадобятся леммы toList_repatint и toList_insert'
+      \lemma toList_repaint {A : \Set} (t : RBTree A) : toList (repaint t) = toList t \elim t
+        | rbLeaf => idp
+        | rbBranch red t1 a t2 => idp
+        | rbBranch black t1 a t2 => idp
+
+      \lemma toList_insert' {A : Dec} (a : A) (t : RBTree A) (s : Sorted (toList t))
+        : toList (insert a t) = Insertion.sort.insert a (toList t) \elim t
+        | rbLeaf => idp
+        | rbBranch c t1 a1 t2 => mcases \with {
+          | inl a1<a => rewrite toList_balanceRight (pmap (toList t1 ++ a1 :: __) (toList_insert' a t2 (Sorted.tailSorted (a1 :: nil) _ (Sorted.tailSorted _ _ s))) *> inv (insert_++-right a1<a s))
+          | inr a<=a1 => rewrite toList_balanceLeft (pmap (__ ++ a1 :: toList t2) (toList_insert' a t1 (Sorted.headSorted s)) *> inv (insert_++-left a<=a1 s))
+        }
+
+      {-
+            -- foo x true => not x
+            \func foo (b1 b2 : Bool) : Bool
+              | true, _ => true
+              | x, true => not x
+              | false, false => false
+      -}
+
+      -- Эти две леммы -- это основное свойство функций балансировки
+      \lemma toList_balanceLeft {A : \Set} {c : Color} {l : RBTree A} {v : A} {r : RBTree A}
+        : toList (balanceLeft c l v r) = toList (rbBranch c l v r)
+        => mcases {balanceLeft} equation
+
+      \lemma toList_balanceRight {A : \Set} {c : Color} {l : RBTree A} {v : A} {r : RBTree A}
+        : toList (balanceRight c l v r) = toList (rbBranch c l v r)
+        => mcases {balanceRight} equation
+
+      -- Эти леммы нужны для доказательства toList_insert'
+      \lemma insert_++-left {A : Dec} {a a1 : A} (a<=a1 : a <= a1) {l1 l2 : List A} (s : Sorted (l1 ++ a1 :: l2))
+        : Insertion.sort.insert a (l1 ++ a1 :: l2) = Insertion.sort.insert a l1 ++ a1 :: l2 \elim l1, s
+        | nil, _ => rewrite (dec<=_reduce a<=a1) idp
+        | :: a2 l1, sorted-cons _ s => mcases \with {
+          | inl a2<a => pmap (a2 ::) (insert_++-left a<=a1 s)
+          | inr a<=a2 => idp
+        }
+
+      \lemma insert_++-right {A : Dec} {a a1 : A} (a1<a : a1 < a) {l1 l2 : List A} (s : Sorted (l1 ++ a1 :: l2))
+        : Insertion.sort.insert a (l1 ++ a1 :: l2) = l1 ++ a1 :: Insertion.sort.insert a l2 \elim l1, s
+        | nil, _ => rewrite (dec<_reduce a1<a) idp
+        | :: a' l1, sorted-cons _ s1 \as s2 => rewrite (dec<_reduce (<=_< (Sorted.allSorted l1 l2 s2) a1<a)) (pmap (a' ::) (insert_++-right a1<a s1))
+    }
+}
+
+-- 3. Лямбда исчисление.
+
+-- Term V -- тип термов, свободные переменные которых лежат в V.
+\data Term (V : \Type)
+  | var V
+  | unit
+  | app (Term V) (Term V)
+  | lam (Term (Maybe V))
+
+-- \x y. x
+-- lam "x" (lam "y" (var "x"))
+\func example {V : \Type} : Term V => lam (lam (var (just nothing)))
+
+-- Отношение одношаговой редукции
+\data Red1 {V : \Type} (t s : Term V) \elim t, s
+  | lam t, lam s => lamRed (Red1 t s)
+  | app t1 t2, app s1 s2 => {
+    | appLeft (Red1 t1 s1) (t2 = s2)
+    | appRight (t1 = s1) (Red1 t2 s2)
+  }
+  | app t a, s => beta (f : Term (Maybe V)) (lam f = t)
+                       ((f TermMonad.>>= maybe a var) = s)
+
+-- f : Term (Maybe A)
+-- a : Term A
+-- f[a] : Term A
+
+-- t < s iff Red1 t s
+
+-- Если red -- некоторое отношение на A, то элемент a : A называется достижимым, если не существует бесконечных цепочек редукций, начинающихся в a.
+-- Это определение хорошо работает только классически, интуиционистски мы определяем предикат достижимости индуктивно.
+-- В индуктивном построении будет всего одно правило: a -- достижим, если достижимы все a', к котором a редуцируется.
+\data Acc {A : \Type} (red : A -> A -> \Type) (a : A)
+  | acc (\Pi (a' : A) -> red a a' -> Acc red a')
+
+-- Так как функция вычисления термов должна быть тотально, то мы определим ее только для достижимых термов.
+-- Она будет дополнительно принимать стратегию редукции, то есть функцию, которая для каждого терма возвращает либо терм, к которому он редуцируется, либо доказательство, что таких термов нет.
+-- Возвращает функция eval терм вместе с доказательством, что он находится в нормальной форме.
+\func eval {V : \Type} (t : Term V) (a : Acc Red1 t)
+           (str : \Pi (s : Term V) -> Decide (\Sigma (q : Term V) (Red1 s q)))
+  : \Sigma (s : Term V) (\Pi (q : Term V) -> Not (Red1 s q)) \elim a
+  | acc f => \case str t \with {
+    | yes (q,r) => eval q (f q r) str
+    | no c => (t, \lam q r => c (q,r))
+  }
+
+{-
+eval :: Term v -> (Term v -> Maybe (Term v)) -> Term v
+eval t str = case str t of
+  Just t' -> eval t' str
+  Nothing -> t
+-}
+
+
+-- Если t достижим, то и lam t достижим.
+\func lamAcc {V : \Type} (t : Term (Maybe V)) (tAcc : Acc Red1 t)
+  : Acc Red1 (lam t) \elim tAcc
+  | acc f => acc (\case \elim __, \elim __ \with {
+    | lam s, lamRed lt=>s => lamAcc s (f s lt=>s)
+  })
+
+-- 4. Нейтральные термы.
+
+-- Терм называется нейтральным, если он достижим и в голове не содержит лямбду.
+-- Точнее предикат нейтральности определяется индуктивно:
+\data Neutral {V : \Type} (t : Term V) \elim t
+  | var v => varNeutral
+  | unit => unitNeutral
+  | app t s => appNeutral (Neutral t) (Acc Red1 s)
+
+-- Нейтральные термы замкнуты относительно редукций.
+\func neutralRed {V : \Type} {t s : Term V} (r : Red1 t s) (n : Neutral t) : Neutral s \elim t, s, r, n
+  | app _ s, _, beta f idp q, appNeutral () _
+  | app t1 t2, app s1 s2, appLeft r1 idp, appNeutral n a => appNeutral (neutralRed r1 n) a
+  | app t1 t2, app s1 s2, appRight idp r2, appNeutral n (acc f) => appNeutral n (f s2 r2)
+
+-- Нейтральные термы действительно достижимы.
+\func neutralAcc {V : \Type} {t : Term V} (n : Neutral t) : Acc Red1 t \elim t, n
+  | unit, unitNeutral => acc (\lam s r => \case r)
+  | var v, varNeutral => acc (\lam s r => \case r)
+  | app t s, appNeutral n a => neutralAppAcc n (neutralAcc n) a
+  \where
+    -- Для доказательства утверждения neutralAcc нам понадобится вспомогательное утверждение, которое говорит, что t s достижим, если t и s достижимы и t нейтрален.
+    \func neutralAppAcc {V : \Type} {t s : Term V} (n : Neutral t)
+                        (a1 : Acc Red1 t) (a2 : Acc Red1 s) : Acc Red1 (app t s)
+    \elim a1, a2
+      | acc f1 \as a1, acc f2 \as a2 => acc (\lam q r => \case \elim q, \elim r \with {
+        | _, beta _ p _ => \case transport Neutral (inv p) n
+        | app t' _, appLeft r1 idp => neutralAppAcc (neutralRed r1 n) (f1 t' r1) a2
+        | app _ s', appRight idp r2 => neutralAppAcc n a1 (f2 s' r2)
+      })
+
+-- 5. Типизация.
+
+-- Теперь определим отношение типизации на термах.
+-- Для этого сначала определим тип типов просто типизированного лямбда исчисления.
+\data Type
+  | Arr Type Type
+  | Unit
+
+-- Отношение типизации определяется индуктивно обычным способом.
+\data hasType {V : \Type} (ctx : V -> Type) (t : Term V) (T : Type) \elim t, T
+  | unit, Unit => unitType
+  | var v, T => varType (ctx v = T)
+  | app f a, B => appType {A : Type} (hasType ctx a A) (hasType ctx f (Arr A B))
+  | lam t, Arr A B => lamType (hasType (maybe A ctx) t B)
+
+-- 6. Типизируемые термы достижимы.
+
+-- Чтобы доказать, что типизируемые термы достижимы, определим вспомогательный предикат "интерпретация T" для каждого типа T, удовлетворяющий следующим условиям:
+-- * Если t имеет тип T, то t лежит в интерпретации T. Это утверждение останется в качетсве упражнения (typeableInterpId).
+-- * Если t лежит в интерпретации T, то t достижим. Это доказывается индукцией по типу (interpAcc).
+
+\func Interp {V : \Type} (T : Type) (t : Term V) : \Type \elim T
+  | Unit => Acc Red1 t
+  | Arr A B => \Pi (a : Term V) -> Interp A a -> Interp B (app t a)
+
+-- Одновременно с interpAcc мы докажем, что любой нейтральный терм лежим в интерпретации T.
+\func neutralInterp {V : \Type} (T : Type) {t : Term V} (n : Neutral t)
+  : Interp T t \elim T
+  | Arr T1 T2 => \lam a i => neutralInterp T2 (appNeutral n (interpAcc T1 a i))
+  | Unit => neutralAcc n
+
+\func interpAcc {V : \Type} (T : Type) (t : Term V) (i : Interp T t) : Acc Red1 t \elim T
+  | Arr T1 T2 => appAccLeft (interpAcc T2 (app t unit) (i unit (neutralInterp T1 unitNeutral)))
+  | Unit => i
+
+\func typeableAcc {V : \Type} (ctx : V -> Type) (t : Term V) (T : Type)
+                  (h : hasType ctx t T) : Acc Red1 t
+  => interpAcc T t (typeableInterpId ctx t T h)
+
+\func typeableInterpId {V : \Type} (ctx : V -> Type) (t : Term V) (T : Type) (p : hasType ctx t T) : Interp T t
+  => transport (Interp T) (>>=-right t) (typeableInterp ctx var (\lam v => neutralInterp (ctx v) varNeutral) t p)
+
+-- Это более общее утверждение необходимо для усиления индукционной гипотезы.
+-- Без доказательства.
+\func typeableInterp {V : \Type} (ctx : V -> Type) (env : V -> Term V)
+                     (C : \Pi (v : V) -> Interp (ctx v) (env v)) (t : Term V) {T : Type} (p : hasType ctx t T)
+  : Interp T (t >>= env)
+  => {?}
